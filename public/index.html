@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5">
+<meta name="theme-color" content="#FAFAF7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14140F" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Scan a barcode, see how it fits your day.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scan &amp; Track">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Scan &amp; Track — Calorie Scanner</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAFAF7; --card:#FFFFFF; --ink:#1A1A18; --line:#1A1A18;
+    --green:#3D7A45; --green-dim:#E7EFE6;
+    --amber:#B8720F; --amber-dim:#F6E9D3;
+    --red:#A93226;
+    --grey:#7A7A72; --grey-line:#DCDAD2;
+    --blue:#2F5D8C;
+    --tap:44px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#14140F; --card:#1E1E19; --ink:#F2F1EA; --line:#4A4A42;
+      --green:#7FB884; --green-dim:#24321F;
+      --amber:#E0A250; --amber-dim:#36291A;
+      --red:#E08276;
+      --grey:#9A998E; --grey-line:#33332C;
+      --blue:#8FB4DA;
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  /* Class rules like .field{display:flex} outrank the UA [hidden] rule, so enforce it. */
+  [hidden]{display:none !important;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:16px; line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+  }
+  h1,h2,h3{font-family:'Archivo',sans-serif;margin:0;letter-spacing:-0.01em;}
+  button{font:inherit;color:inherit;}
+
+  /* ------------------------------ layout ------------------------------ */
+  .shell{
+    max-width:520px; margin:0 auto; min-height:100%;
+    display:flex; flex-direction:column;
+    padding-bottom:calc(72px + env(safe-area-inset-bottom));
+  }
+  .topbar{
+    position:sticky; top:0; z-index:20;
+    background:var(--paper);
+    padding:calc(12px + env(safe-area-inset-top)) 16px 10px;
+    border-bottom:2px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .topbar h1{font-size:20px;font-weight:900;}
+  .topbar .sub{font-size:12px;color:var(--grey);font-weight:500;}
+  main{flex:1;padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px;}
+  .view[hidden]{display:none;}
+  .view{display:flex;flex-direction:column;gap:16px;animation:fade .18s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  /* ------------------------------- cards ------------------------------ */
+  .card{
+    border:3px solid var(--line); border-radius:4px; background:var(--card);
+    overflow:hidden;
+  }
+  .card-head{
+    padding:10px 14px; border-bottom:2px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .card-head h2{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;}
+  .card-body{padding:14px;}
+
+  /* ------------------------------ buttons ----------------------------- */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    min-height:var(--tap); padding:11px 16px;
+    font-weight:600; font-size:15px;
+    border:2px solid var(--line); border-radius:4px;
+    background:var(--ink); color:var(--paper);
+    cursor:pointer; transition:transform .08s ease, opacity .15s ease;
+  }
+  .btn:active{transform:translateY(1px) scale(.995);}
+  .btn.secondary{background:var(--card);color:var(--ink);}
+  .btn.green{background:var(--green);border-color:var(--green);color:#fff;}
+  .btn.ghost{background:transparent;border-color:var(--grey-line);color:var(--grey);}
+  .btn.block{width:100%;}
+  .btn.big{min-height:58px;font-size:17px;font-weight:700;font-family:'Archivo',sans-serif;}
+  .btn:disabled{opacity:.45;cursor:default;}
+
+  /* ------------------------------ inputs ------------------------------ */
+  input,select{
+    font:inherit; font-size:16px; /* 16px keeps iOS from zooming on focus */
+    width:100%; padding:11px 12px; min-height:var(--tap);
+    border:2px solid var(--grey-line); border-radius:4px;
+    background:var(--card); color:var(--ink); appearance:none;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--ink);}
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--grey) 50%),linear-gradient(135deg,var(--grey) 50%,transparent 50%);
+    background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:12px;font-weight:600;color:var(--grey);text-transform:uppercase;letter-spacing:.04em;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .grid2 .full{grid-column:1/-1;}
+
+  /* ------------------------------ summary ----------------------------- */
+  .summary{display:flex;align-items:center;gap:16px;}
+  .ring{flex:0 0 118px;width:118px;height:118px;position:relative;}
+  .ring svg{transform:rotate(-90deg);display:block;}
+  .ring .track{stroke:var(--grey-line);}
+  .ring .prog{stroke:var(--green);transition:stroke-dasharray .45s cubic-bezier(.4,0,.2,1),stroke .3s;}
+  .ring.over .prog{stroke:var(--amber);}
+  .ring-mid{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;
+  }
+  .ring-mid b{font-family:'Archivo',sans-serif;font-size:27px;font-weight:900;line-height:1;}
+  .ring-mid span{font-size:10px;color:var(--grey);text-transform:uppercase;letter-spacing:.06em;margin-top:3px;font-weight:600;}
+  .stats{flex:1;display:flex;flex-direction:column;gap:9px;min-width:0;}
+  .stat{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--grey);gap:8px;}
+  .stat b{font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:var(--ink);}
+
+  .macros{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;padding-top:14px;border-top:2px solid var(--grey-line);}
+  .macro span{font-size:11px;color:var(--grey);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+  .macro b{display:block;font-family:'Archivo',sans-serif;font-size:16px;font-weight:800;margin-top:1px;}
+  .macro .mtrack{height:5px;border-radius:3px;background:var(--grey-line);margin-top:5px;overflow:hidden;}
+  .macro .mfill{height:100%;border-radius:3px;transition:width .4s ease;}
+
+  /* ------------------------------ entries ----------------------------- */
+  .entry{
+    display:flex;align-items:center;gap:12px;
+    padding:11px 14px;border-top:1px solid var(--grey-line);
+  }
+  .entry:first-child{border-top:none;}
+  .entry-main{flex:1;min-width:0;}
+  .entry-name{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .entry-sub{font-size:12px;color:var(--grey);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .entry-kcal{font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;white-space:nowrap;}
+  .entry-del{
+    flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    border:none;background:transparent;color:var(--grey);cursor:pointer;border-radius:4px;font-size:19px;line-height:1;
+  }
+  .entry-del:active{background:var(--grey-line);color:var(--red);}
+  .empty{padding:22px 14px;text-align:center;color:var(--grey);font-size:14px;}
+
+  /* ------------------------------- week ------------------------------- */
+  .week{display:flex;gap:6px;align-items:flex-end;height:78px;padding:4px 0;}
+  .day{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;
+    background:none;border:none;padding:0;cursor:pointer;font:inherit;}
+  .day .col{width:100%;background:var(--grey-line);border-radius:3px;min-height:3px;transition:height .35s ease;}
+  .day.has .col{background:var(--green);}
+  .day.over .col{background:var(--amber);}
+  .day.today .col{outline:2px solid var(--ink);outline-offset:1px;}
+  .day small{font-size:9px;color:var(--grey);font-weight:600;text-transform:uppercase;}
+
+  /* ------------------------------ results ----------------------------- */
+  .result{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    padding:11px 14px;border:none;border-top:1px solid var(--grey-line);
+    background:transparent;cursor:pointer;
+  }
+  .result:first-of-type{border-top:none;}
+  .result:active{background:var(--green-dim);}
+  .thumb{
+    flex:0 0 44px;width:44px;height:44px;border-radius:4px;border:1px solid var(--grey-line);
+    object-fit:cover;background:var(--paper);
+  }
+  .thumb.ph{display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--grey);}
+  .result-main{flex:1;min-width:0;}
+  .result-name{font-weight:600;font-size:14px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .result-sub{font-size:12px;color:var(--grey);margin-top:1px;}
+  .result-kcal{font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;text-align:right;white-space:nowrap;}
+  .result-kcal small{display:block;font-size:9px;color:var(--grey);font-weight:600;letter-spacing:.04em;}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    padding:8px 12px;min-height:38px;display:inline-flex;align-items:center;gap:6px;
+    border:2px solid var(--grey-line);border-radius:20px;background:var(--card);
+    font-size:13px;font-weight:600;cursor:pointer;max-width:100%;
+  }
+  .chip:active{border-color:var(--ink);}
+  .chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chip b{font-family:'Archivo',sans-serif;color:var(--grey);font-weight:800;flex:0 0 auto;}
+
+  /* ------------------------------ tabbar ------------------------------ */
+  .tabbar{
+    position:fixed;bottom:0;left:0;right:0;z-index:30;
+    display:flex;background:var(--card);border-top:3px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom);
+    max-width:520px;margin:0 auto;
+  }
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:9px 4px 8px;border:none;background:transparent;color:var(--grey);
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    cursor:pointer;min-height:58px;justify-content:center;
+  }
+  .tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .tab[aria-selected="true"]{color:var(--ink);}
+  .tab.scan[aria-selected="true"]{color:var(--green);}
+
+  /* ------------------------------ scanner ----------------------------- */
+  .scanner{position:fixed;inset:0;z-index:60;background:#000;display:flex;flex-direction:column;}
+  .scanner[hidden]{display:none;}
+  .scanner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .scan-ui{position:relative;flex:1;display:flex;flex-direction:column;justify-content:space-between;}
+  .scan-top{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:calc(12px + env(safe-area-inset-top)) 14px 14px;
+    background:linear-gradient(rgba(0,0,0,.65),transparent);
+  }
+  .scan-top h2{color:#fff;font-size:15px;font-weight:800;}
+  .icon-btn{
+    width:44px;height:44px;flex:0 0 44px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;
+  }
+  .icon-btn[aria-pressed="true"]{background:#fff;color:#000;}
+  .reticle{
+    align-self:center;width:min(78%,300px);aspect-ratio:5/3;
+    border:3px solid rgba(255,255,255,.9);border-radius:10px;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.45);
+    position:relative;overflow:hidden;
+  }
+  .reticle::after{
+    content:'';position:absolute;left:0;right:0;height:2px;background:#4ADE80;
+    box-shadow:0 0 10px #4ADE80;animation:sweep 2s ease-in-out infinite;
+  }
+  @keyframes sweep{0%,100%{top:8%}50%{top:92%}}
+  .scan-bottom{
+    padding:16px 16px calc(20px + env(safe-area-inset-bottom));
+    background:linear-gradient(transparent,rgba(0,0,0,.75));
+    display:flex;flex-direction:column;gap:12px;align-items:center;
+  }
+  .scan-msg{color:#fff;font-size:14px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.8);min-height:20px;}
+  .scan-err{
+    margin:auto 16px;padding:18px;border-radius:8px;background:var(--card);color:var(--ink);
+    max-width:340px;text-align:center;display:flex;flex-direction:column;gap:12px;
+  }
+  .scan-err h3{font-size:16px;font-weight:800;}
+  .scan-err p{margin:0;font-size:14px;color:var(--grey);}
+
+  /* ------------------------------- sheet ------------------------------ */
+  .backdrop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;}
+  .backdrop[hidden]{display:none;}
+  .sheet{
+    width:100%;max-width:520px;background:var(--card);
+    border:3px solid var(--line);border-bottom:none;border-radius:14px 14px 0 0;
+    padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height:90vh;overflow-y:auto;animation:rise .22s cubic-bezier(.2,.8,.3,1);
+  }
+  @keyframes rise{from{transform:translateY(100%);}to{transform:none;}}
+  .sheet-grip{width:40px;height:4px;border-radius:2px;background:var(--grey-line);margin:0 auto 14px;}
+  .sheet h3{font-size:18px;font-weight:800;line-height:1.25;}
+  .sheet .brandline{font-size:13px;color:var(--grey);margin:3px 0 0;}
+  .seg{display:flex;gap:0;border:2px solid var(--line);border-radius:4px;overflow:hidden;}
+  .seg button{
+    flex:1;padding:10px 6px;min-height:var(--tap);border:none;background:var(--card);
+    font-size:13px;font-weight:700;cursor:pointer;border-left:2px solid var(--line);
+  }
+  .seg button:first-child{border-left:none;}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);}
+  .seg button:disabled{opacity:.4;cursor:default;background:var(--card);color:var(--grey);}
+  .kcal-preview{
+    display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    padding:14px 0;margin:14px 0;border-top:3px solid var(--line);border-bottom:3px solid var(--line);
+  }
+  .kcal-preview b{font-family:'Archivo',sans-serif;font-size:34px;font-weight:900;line-height:1;}
+  .kcal-preview .lbl{font-size:13px;color:var(--grey);font-weight:600;}
+  .macro-line{display:flex;gap:14px;font-size:12px;color:var(--grey);margin-bottom:14px;flex-wrap:wrap;}
+  .macro-line b{color:var(--ink);font-weight:700;}
+  .pill{
+    display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:800;
+    font-family:'Archivo',sans-serif;background:var(--green-dim);color:var(--green);
+  }
+  .pill.high{background:var(--amber-dim);color:var(--amber);}
+
+  /* ------------------------------- misc ------------------------------- */
+  .status{font-size:13px;color:var(--grey);min-height:18px;padding:0 2px;}
+  .status.error{color:var(--red);}
+  .spinner{
+    width:16px;height:16px;border:2px solid var(--grey-line);border-top-color:var(--ink);
+    border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:-3px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .toast{
+    position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));
+    transform:translateX(-50%) translateY(12px);
+    background:var(--ink);color:var(--paper);padding:11px 18px;border-radius:24px;
+    font-size:14px;font-weight:600;z-index:70;opacity:0;pointer-events:none;
+    transition:opacity .2s ease,transform .2s ease;max-width:88vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%);}
+  .offline{background:var(--amber-dim);color:var(--amber);font-size:12px;font-weight:600;
+    padding:7px 14px;text-align:center;border-bottom:2px solid var(--amber);}
+  .offline[hidden]{display:none;}
+  footer{padding:0 16px 8px;text-align:center;font-size:11px;color:var(--grey);}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important;}}
+</style>
+</head>
+<body>
+
+<div class="offline" id="offline-banner" hidden>Offline — changes will sync when you reconnect.</div>
+
+<div class="shell">
+  <header class="topbar">
+    <div>
+      <h1 id="top-title">Today</h1>
+      <div class="sub" id="top-sub">—</div>
+    </div>
+    <div style="display:flex;gap:6px;" id="date-nav">
+      <button class="btn secondary" id="prev-day" style="min-height:38px;padding:6px 12px;" aria-label="Previous day">‹</button>
+      <button class="btn secondary" id="next-day" style="min-height:38px;padding:6px 12px;" aria-label="Next day">›</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============================ TODAY ============================ -->
+    <section class="view" id="view-today">
+      <div class="card">
+        <div class="card-body">
+          <div class="summary">
+            <div class="ring" id="ring">
+              <svg width="118" height="118" viewBox="0 0 118 118" aria-hidden="true">
+                <circle class="track" cx="59" cy="59" r="50" stroke-width="11" fill="none"/>
+                <circle class="prog" id="ring-prog" cx="59" cy="59" r="50" stroke-width="11" fill="none"
+                        stroke-linecap="round" stroke-dasharray="0 314"/>
+              </svg>
+              <div class="ring-mid">
+                <b id="ring-num">—</b>
+                <span id="ring-label">left</span>
+              </div>
+            </div>
+            <div class="stats">
+              <div class="stat"><span>Eaten</span><b id="stat-eaten">0</b></div>
+              <div class="stat"><span>Target</span><b id="stat-target">—</b></div>
+              <div class="stat"><span>Items</span><b id="stat-items">0</b></div>
+            </div>
+          </div>
+          <div class="macros">
+            <div class="macro">
+              <span>Protein</span><b id="m-protein">0 g</b>
+              <div class="mtrack"><div class="mfill" id="mb-protein" style="width:0;background:var(--blue)"></div></div>
+            </div>
+            <div class="macro">
+              <span>Carbs</span><b id="m-carbs">0 g</b>
+              <div class="mtrack"><div class="mfill" id="mb-carbs" style="width:0;background:var(--amber)"></div></div>
+            </div>
+            <div class="macro">
+              <span>Fat</span><b id="m-fat">0 g</b>
+              <div class="mtrack"><div class="mfill" id="mb-fat" style="width:0;background:var(--green)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Logged</h2><span class="sub" id="log-count"></span></div>
+        <div id="entry-list"><p class="empty">Nothing logged yet. Tap <b>Scan</b> to add something.</p></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Last 7 days</h2></div>
+        <div class="card-body"><div class="week" id="week"></div></div>
+      </div>
+    </section>
+
+    <!-- ============================= ADD ============================= -->
+    <section class="view" id="view-add" hidden>
+      <button class="btn green big block" id="open-scanner">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+        </svg>
+        Scan a barcode
+      </button>
+
+      <div class="card">
+        <div class="card-head"><h2>Search foods</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;gap:8px;">
+            <input id="search-input" type="search" placeholder="e.g. greek yogurt" enterkeyhint="search"
+                   autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button class="btn secondary" id="search-btn" style="flex:0 0 auto;" aria-label="Search">Go</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input id="barcode-input" type="text" inputmode="numeric" pattern="[0-9]*"
+                   placeholder="Or type a barcode number" enterkeyhint="go" autocomplete="off">
+            <button class="btn secondary" id="barcode-btn" style="flex:0 0 auto;" aria-label="Look up barcode">Look up</button>
+          </div>
+          <div class="status" id="search-status" role="status" aria-live="polite"></div>
+        </div>
+        <div id="search-results"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Quick add</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="grid2">
+            <div class="field full">
+              <label for="custom-name">Food name</label>
+              <input id="custom-name" type="text" placeholder="Homemade pasta" autocomplete="off">
+            </div>
+            <div class="field full">
+              <label for="custom-kcal">Calories</label>
+              <input id="custom-kcal" type="number" inputmode="numeric" min="0" max="20000" placeholder="450">
+            </div>
+          </div>
+          <button class="btn block secondary" id="custom-add">Add to log</button>
+        </div>
+      </div>
+
+      <div class="card" id="recents-card" hidden>
+        <div class="card-head"><h2>Log again</h2></div>
+        <div class="card-body"><div class="chips" id="recents"></div></div>
+      </div>
+    </section>
+
+    <!-- ============================== YOU ============================= -->
+    <section class="view" id="view-you" hidden>
+      <div class="card">
+        <div class="card-head"><h2>Your daily target</h2></div>
+        <div class="card-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="sex">Sex</label>
+              <select id="sex"><option value="male">Male</option><option value="female">Female</option></select>
+            </div>
+            <div class="field">
+              <label for="age">Age</label>
+              <input id="age" type="number" inputmode="numeric" min="10" max="100" value="30">
+            </div>
+            <div class="field">
+              <label for="weight">Weight (kg)</label>
+              <input id="weight" type="number" inputmode="decimal" min="25" max="300" value="70">
+            </div>
+            <div class="field">
+              <label for="height">Height (cm)</label>
+              <input id="height" type="number" inputmode="numeric" min="100" max="250" value="175">
+            </div>
+            <div class="field full">
+              <label for="activity">Activity level</label>
+              <select id="activity">
+                <option value="1.2">Sedentary — little or no exercise</option>
+                <option value="1.375">Light — exercise 1–3 days/week</option>
+                <option value="1.55" selected>Moderate — exercise 3–5 days/week</option>
+                <option value="1.725">Active — exercise 6–7 days/week</option>
+                <option value="1.9">Very active — hard daily training</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label for="goal">Goal</label>
+              <select id="goal">
+                <option value="lose">Lose weight (−500 kcal)</option>
+                <option value="maintain" selected>Maintain</option>
+                <option value="gain">Gain weight (+300 kcal)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="kcal-preview">
+            <span class="lbl">Daily target</span>
+            <span><b id="target-value">—</b> <span class="lbl">kcal</span></span>
+          </div>
+
+          <div class="field full" style="margin-bottom:12px;">
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;color:var(--ink);">
+              <input type="checkbox" id="use-custom" style="width:20px;height:20px;min-height:20px;flex:0 0 20px;">
+              Set my own target instead
+            </label>
+          </div>
+          <div class="field full" id="custom-target-field" hidden style="margin-bottom:12px;">
+            <label for="custom-target">Custom target (kcal)</label>
+            <input id="custom-target" type="number" inputmode="numeric" min="800" max="8000" placeholder="2200">
+          </div>
+
+          <button class="btn green block" id="save-profile">Save</button>
+          <div class="status" id="profile-status" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Your data</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+          <p style="margin:0;font-size:13px;color:var(--grey);">
+            Your log is saved on the server under a private device key, so it survives
+            refreshes, restarts and redeploys. Keep this key to restore your data on another phone.
+          </p>
+          <div class="field">
+            <label for="device-key">Device key</label>
+            <input id="device-key" type="text" readonly>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn secondary" id="copy-key" style="flex:1;">Copy key</button>
+            <button class="btn secondary" id="restore-key" style="flex:1;">Use another key</button>
+          </div>
+          <button class="btn ghost block" id="export-data">Export today as text</button>
+        </div>
+      </div>
+      <footer>Nutrition data from Open Food Facts. Coverage varies by product and region.</footer>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist">
+    <button class="tab" id="tab-today" role="tab" aria-selected="true" aria-controls="view-today">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="M12 7v5l3 2"/></svg>
+      Today
+    </button>
+    <button class="tab scan" id="tab-add" role="tab" aria-selected="false" aria-controls="view-add">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+      Scan
+    </button>
+    <button class="tab" id="tab-you" role="tab" aria-selected="false" aria-controls="view-you">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+      You
+    </button>
+  </nav>
+</div>
+
+<!-- ============================== SCANNER ============================== -->
+<div class="scanner" id="scanner" hidden role="dialog" aria-modal="true" aria-label="Barcode scanner">
+  <video id="scan-video" playsinline muted autoplay></video>
+  <div class="scan-ui">
+    <div class="scan-top">
+      <h2>Point at a barcode</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="icon-btn" id="torch-btn" hidden aria-pressed="false" aria-label="Toggle flashlight">⚡</button>
+        <button class="icon-btn" id="close-scanner" aria-label="Close scanner">✕</button>
+      </div>
+    </div>
+    <div class="reticle" id="reticle"></div>
+    <div class="scan-bottom">
+      <div class="scan-msg" id="scan-msg">Starting camera…</div>
+      <button class="btn secondary" id="scan-type-instead">Type the number instead</button>
+    </div>
+  </div>
+  <div class="scan-err" id="scan-err" hidden>
+    <h3 id="scan-err-title">Camera unavailable</h3>
+    <p id="scan-err-msg"></p>
+    <button class="btn" id="scan-err-retry">Try again</button>
+    <button class="btn secondary" id="scan-err-close">Type a barcode instead</button>
+  </div>
+</div>
+
+<!-- =============================== SHEET =============================== -->
+<div class="backdrop" id="portion-backdrop" hidden>
+  <div class="sheet" id="portion-sheet" role="dialog" aria-modal="true" aria-labelledby="portion-name">
+    <div class="sheet-grip"></div>
+    <h3 id="portion-name">—</h3>
+    <p class="brandline" id="portion-brand"></p>
+
+    <div style="margin:14px 0 12px;">
+      <div class="seg" id="unit-seg">
+        <button type="button" data-unit="serving" aria-pressed="true">Servings</button>
+        <button type="button" data-unit="g" aria-pressed="false">Grams</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="portion-amount" id="portion-amount-label">Amount</label>
+      <input id="portion-amount" type="number" inputmode="decimal" min="0" step="0.25" value="1">
+    </div>
+
+    <div class="kcal-preview">
+      <span class="lbl">Calories<br><span id="portion-basis" style="font-size:11px;"></span></span>
+      <span><b id="portion-kcal">0</b> <span class="lbl">kcal</span></span>
+    </div>
+    <div class="macro-line" id="portion-macros"></div>
+    <div style="margin-bottom:14px;"><span class="pill" id="portion-pct" hidden></span></div>
+
+    <button class="btn green block" id="portion-add">Add to log</button>
+    <button class="btn ghost block" id="portion-cancel" style="margin-top:8px;">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/vendor/zxing.min.js" defer></script>
+<script src="/app.js" defer></script>
+</body>
+</html>

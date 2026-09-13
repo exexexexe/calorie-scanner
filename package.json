@@ -1,0 +1,19 @@
+{
+  "name": "calorie-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Barcode calorie scanner with persistent daily logging",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "express": "^4.19.2"
+  }
+}
