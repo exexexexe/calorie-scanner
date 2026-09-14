@@ -42,13 +42,63 @@ const clamp = (v, lo, hi, fallback) => {
 // Wrap async handlers so a rejected promise becomes a 500 instead of a hang.
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+/* ---------------------------- rate limiting --------------------------- */
+
+/* The app has no accounts, so there is nobody to bill and nobody to ban —
+   the only thing standing between a public URL and a full volume is this.
+   Two separate budgets, because the two abuses are different: writes cost
+   disk here, and lookups cost somebody else's bandwidth at Open Food Facts,
+   who ask nicely that you not hammer them. Fixed windows rather than a
+   token bucket; the failure mode of a fixed window is that you can spend
+   two windows' worth across a boundary, which at these numbers is fine.
+
+   In memory, so it resets on deploy and does not survive more than one
+   replica. Both are acceptable for a single-instance personal tracker and
+   would not be for anything larger. */
+const buckets = new Map();
+
+function rateLimit({ max, windowMs, name }) {
+  return (req, res, next) => {
+    const key = name + ':' + (req.ip || 'unknown');
+    const now = Date.now();
+    let b = buckets.get(key);
+    if (!b || now >= b.reset) {
+      b = { count: 0, reset: now + windowMs };
+      buckets.set(key, b);
+    }
+    b.count += 1;
+    const left = Math.max(0, max - b.count);
+    res.set('X-RateLimit-Limit', String(max));
+    res.set('X-RateLimit-Remaining', String(left));
+    res.set('X-RateLimit-Reset', String(Math.ceil(b.reset / 1000)));
+    if (b.count > max) {
+      const secs = Math.ceil((b.reset - now) / 1000);
+      res.set('Retry-After', String(secs));
+      return res.status(429).json({
+        error: 'Too many requests. Try again in ' + secs + 's.'
+      });
+    }
+    next();
+  };
+}
+
+// Sweep expired buckets so a long uptime does not grow the map without end.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, b] of buckets) if (now >= b.reset) buckets.delete(k);
+}, 10 * 60 * 1000).unref();
+
+const HOUR = 60 * 60 * 1000;
+const limitWrites = rateLimit({ max: 120, windowMs: HOUR, name: 'w' });
+const limitUpstream = rateLimit({ max: 300, windowMs: HOUR, name: 'u' });
+
 /* ------------------------------- health ------------------------------- */
 
 app.get('/healthz', (_req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
 /* ------------------------------ food data ----------------------------- */
 
-app.get('/api/lookup/:barcode', wrap(async (req, res) => {
+app.get('/api/lookup/:barcode', limitUpstream, wrap(async (req, res) => {
   const code = String(req.params.barcode).replace(/\D/g, '');
   if (code.length < 6 || code.length > 14) {
     return res.status(400).json({ error: 'That barcode does not look valid.' });
@@ -65,7 +115,7 @@ app.get('/api/lookup/:barcode', wrap(async (req, res) => {
   }
 }));
 
-app.get('/api/search', wrap(async (req, res) => {
+app.get('/api/search', limitUpstream, wrap(async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json({ foods: [] });
   try {
@@ -105,7 +155,7 @@ app.get('/api/profile', requireDevice, (req, res) => {
   res.json({ profile: getProfile(req.deviceId) });
 });
 
-app.put('/api/profile', requireDevice, (req, res) => {
+app.put('/api/profile', limitWrites, requireDevice, (req, res) => {
   const profile = saveProfile(req.deviceId, sanitizeProfile(req.body || {}));
   res.json({ profile });
 });
@@ -148,13 +198,13 @@ app.get('/api/entries', requireDevice, (req, res) => {
   res.json({ date, entries: listEntries(req.deviceId, date) });
 });
 
-app.post('/api/entries', requireDevice, (req, res) => {
+app.post('/api/entries', limitWrites, requireDevice, (req, res) => {
   const { entry, error } = sanitizeEntry(req.body || {});
   if (error) return res.status(400).json({ error });
   res.status(201).json({ entry: addEntry(req.deviceId, entry) });
 });
 
-app.delete('/api/entries/:id', requireDevice, (req, res) => {
+app.delete('/api/entries/:id', limitWrites, requireDevice, (req, res) => {
   const ok = deleteEntry(req.deviceId, String(req.params.id));
   if (!ok) return res.status(404).json({ error: 'Entry not found.' });
   res.json({ ok: true });
